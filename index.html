@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>なごみや 月次受注集計ツール</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
+.container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+.subtitle { font-size: 13px; color: #666; margin-bottom: 2rem; }
+.card { background: #fff; border-radius: 12px; border: 1px solid #e0e0e0; padding: 1.5rem; margin-bottom: 1.5rem; }
+label { font-size: 13px; color: #666; display: block; margin-bottom: 6px; }
+input[type="month"] { font-size: 14px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 8px; outline: none; }
+input[type="month"]:focus { border-color: #1F3864; }
+.dropzone { border: 2px dashed #ccc; border-radius: 12px; padding: 2.5rem; text-align: center; cursor: pointer; margin: 1rem 0; transition: all 0.2s; }
+.dropzone:hover, .dropzone.active { border-color: #1F3864; background: #f0f4ff; }
+.dropzone-icon { font-size: 40px; margin-bottom: 8px; }
+.dropzone p { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+.dropzone small { font-size: 12px; color: #888; }
+.file-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
+.file-tag { background: #f0f0f0; border-radius: 6px; padding: 3px 10px; font-size: 12px; }
+.btn { width: 100%; padding: 12px; font-size: 15px; font-weight: 600; background: #1F3864; color: #fff; border: none; border-radius: 10px; cursor: pointer; transition: background 0.2s; }
+.btn:hover { background: #2E75B6; }
+.btn:disabled { background: #ccc; cursor: not-allowed; }
+.debug { font-size: 12px; color: #888; font-family: monospace; white-space: pre-wrap; margin-top: 1rem; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+.summary-card { background: #f8f9fa; border-radius: 10px; padding: 1rem; }
+.summary-card .label { font-size: 12px; color: #666; margin-bottom: 4px; }
+.summary-card .value { font-size: 22px; font-weight: 600; color: #1F3864; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 600; color: #666; border-bottom: 2px solid #eee; }
+th:not(:first-child) { text-align: right; }
+td { padding: 12px; border-bottom: 1px solid #f0f0f0; }
+td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+tr:nth-child(even) { background: #fafafa; }
+.total-row { background: #EBF3FB !important; font-weight: 600; }
+.result-header { padding: 1rem 1.25rem; border-bottom: 1px solid #eee; margin-bottom: 0; }
+.result-header h2 { font-size: 16px; font-weight: 600; }
+.result-header p { font-size: 12px; color: #888; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🍡 なごみや 月次受注集計ツール</h1>
+  <p class="subtitle">BカートのCSVをドロップして集計できます</p>
+
+  <div class="card" style="margin-bottom:1.5rem; background:#f8f9fa;">
+    <h2 style="font-size:15px; font-weight:600; margin-bottom:1rem;">📋 使い方・抽出ルール</h2>
+    <div style="font-size:13px; line-height:1.8; color:#444;">
+      <p style="font-weight:600; margin-bottom:6px;">【STEP 1｜BカートでCSVをダウンロード】</p>
+      <p>受注管理 → 配送情報タブ → 以下の条件で絞り込み</p>
+      <ul style="margin: 6px 0 12px 1.2rem;">
+        <li>納品日：集計したい月の1日〜末日</li>
+        <li>対応状況：<strong>完了</strong>・<strong>採否結果待ち</strong>にチェック</li>
+      </ul>
+      <p>「★ナゴミヤ月末用CSV」をダウンロード（500件ずつ複数ファイルになる場合あり）</p>
+      <p style="margin-top:8px; color:#c00;">⚠️ CSVはExcelで開かないこと（データが壊れます）</p>
+      <p style="font-weight:600; margin-top:16px; margin-bottom:6px;">【STEP 2｜ツールで集計】</p>
+      <ul style="margin: 6px 0 12px 1.2rem;">
+        <li>対象年月を選択</li>
+        <li>ダウンロードしたCSVを全部ドロップ（複数同時OK）</li>
+        <li>「集計を実行」ボタンを押す</li>
+      </ul>
+      <p style="font-weight:600; margin-bottom:6px;">【集計対象の決済方法】</p>
+      <ul style="margin: 6px 0 0 1.2rem;">
+        <li>銀行振込</li>
+        <li>Bカート掛け払い 請求代行プラン</li>
+        <li>マネーフォワード ケッサイ</li>
+        <li>クレジット</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>対象年月</label>
+    <input type="month" id="targetMonth">
+
+    <div class="dropzone" id="dropzone">
+      <div class="dropzone-icon">📂</div>
+      <p>CSVファイルをここにドロップ</p>
+      <small>複数ファイル同時OK｜クリックして選択も可</small>
+      <input type="file" id="fileInput" accept=".csv" multiple style="display:none;">
+    </div>
+
+    <div class="file-list" id="fileList"></div>
+    <button class="btn" id="runBtn" onclick="runAggregation()" disabled>集計を実行</button>
+    <div class="debug" id="debugArea"></div>
+  </div>
+
+  <div id="resultArea"></div>
+</div>
+
+<script>
+const TARGET_PAYMENTS = ['銀行振込','Bカート掛け払い 請求代行プラン','マネーフォワード ケッサイ','クレジット'];
+const TARGET_STATUSES = ['完了', '採否結果待ち'];
+let loadedFiles = [];
+
+// 今月をデフォルト設定
+const now = new Date();
+document.getElementById('targetMonth').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('active'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('active'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('active'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  loadedFiles = Array.from(files);
+  document.getElementById('fileList').innerHTML = loadedFiles.map(f =>
+    `<span class="file-tag">📄 ${f.name}</span>`
+  ).join('');
+  document.getElementById('runBtn').disabled = loadedFiles.length === 0;
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const buf = e.target.result;
+      const bytes = new Uint8Array(buf);
+      if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+        resolve(new TextDecoder('utf-8').decode(buf)); return;
+      }
+      try {
+        const sjis = new TextDecoder('shift-jis').decode(buf);
+        if (/[ぁ-んァ-ン一-龯]/.test(sjis)) { resolve(sjis); return; }
+      } catch(e) {}
+      resolve(new TextDecoder('utf-8').decode(buf));
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let i = 0;
+  const len = text.length;
+
+  function parseRow() {
+    const fields = [];
+    while (i < len) {
+      if (text[i] === '"') {
+        i++;
+        let field = '';
+        while (i < len) {
+          if (text[i] === '"' && text[i+1] === '"') { field += '"'; i += 2; }
+          else if (text[i] === '"') { i++; break; }
+          else { field += text[i++]; }
+        }
+        fields.push(field.trim());
+        if (i < len && text[i] === ',') i++;
+        else break;
+      } else {
+        let field = '';
+        while (i < len && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') {
+          field += text[i++];
+        }
+        fields.push(field.trim());
+        if (i < len && text[i] === ',') i++;
+        else break;
+      }
+    }
+    while (i < len && (text[i] === '\n' || text[i] === '\r')) i++;
+    return fields;
+  }
+
+  const headers = parseRow();
+  while (i < len) {
+    if (text[i] === '\n' || text[i] === '\r') { i++; continue; }
+    const vals = parseRow();
+    if (vals.length === 0 || (vals.length === 1 && vals[0] === '')) continue;
+    const obj = {};
+    headers.forEach((h, j) => { obj[h] = vals[j] !== undefined ? vals[j] : ''; });
+    rows.push(obj);
+  }
+  return { headers, rows };
+}
+
+function parseTax(val) {
+  let t8 = 0, t10 = 0;
+  if (!val) return { ex8: 0, ex10: 0 };
+  String(val).split(/[\r\n,]+/).forEach(part => {
+    part = part.trim();
+    if (part.startsWith('10:')) { try { t10 = parseFloat(part.substring(3)) || 0; } catch(e){} }
+    else if (part.startsWith('8:')) { try { t8 = parseFloat(part.substring(2)) || 0; } catch(e){} }
+  });
+  return { ex8: Math.round(t8/1.08), ex10: Math.round(t10/1.10) };
+}
+
+const fmt = n => '¥' + Math.round(n).toLocaleString();
+
+async function runAggregation() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.textContent = '集計中...';
+  document.getElementById('resultArea').innerHTML = '';
+  document.getElementById('debugArea').textContent = '';
+
+  const monthVal = document.getElementById('targetMonth').value;
+  const [year, month] = monthVal.split('-');
+  const dateFrom = `${year}-${month}-01`;
+  const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+  const dateTo = `${year}-${month}-${String(lastDay).padStart(2,'0')}`;
+
+  let allRows = [];
+  for (const file of loadedFiles) {
+    const text = await readFileAsText(file);
+    const { rows } = parseCSV(text);
+    allRows = allRows.concat(rows);
+  }
+
+  const seen = new Set();
+  const deduped = [];
+  allRows.forEach(row => {
+    const no = row['受注番号'];
+    if (no && !seen.has(no)) { seen.add(no); deduped.push(row); }
+  });
+
+  const filtered = deduped.filter(r => {
+    const d = (r['納品日'] || '').substring(0,10);
+    return d >= dateFrom && d <= dateTo &&
+      TARGET_STATUSES.some(s => (r['対応状況']||'').includes(s)) &&
+      TARGET_PAYMENTS.some(p => (r['決済方法']||'').includes(p));
+  });
+
+  document.getElementById('debugArea').textContent =
+    `取得: ${allRows.length}行 / 重複削除: ${deduped.length}件 / 集計対象: ${filtered.length}件`;
+
+  if (filtered.length === 0) {
+    document.getElementById('resultArea').innerHTML = '<div class="card"><p style="color:#888;font-size:14px;">該当データがありません。納品日・ステータスを確認してください。</p></div>';
+    btn.disabled = false; btn.textContent = '集計を実行'; return;
+  }
+
+  const summary = {};
+  TARGET_PAYMENTS.forEach(pm => { summary[pm] = { count:0, ex8:0, ex10:0, total:0 }; });
+  filtered.forEach(row => {
+    const pm = TARGET_PAYMENTS.find(p => (row['決済方法']||'').includes(p));
+    if (!pm) return;
+    const { ex8, ex10 } = parseTax(row['税率別受注総額']);
+    summary[pm].count++;
+    summary[pm].ex8 += ex8;
+    summary[pm].ex10 += ex10;
+    summary[pm].total += parseFloat((row['受注総額']||'0')) || 0;
+  });
+
+  const grandEx8 = Object.values(summary).reduce((s,v)=>s+v.ex8,0);
+  const grandEx10 = Object.values(summary).reduce((s,v)=>s+v.ex10,0);
+  const grandTotal = Object.values(summary).reduce((s,v)=>s+v.total,0);
+  const grandCount = Object.values(summary).reduce((s,v)=>s+v.count,0);
+
+  const trows = TARGET_PAYMENTS.map(pm => {
+    const v = summary[pm];
+    return `<tr>
+      <td>${pm}</td>
+      <td>${v.count}</td>
+      <td>${fmt(v.ex8)}</td>
+      <td>${fmt(v.ex10)}</td>
+      <td><strong>${fmt(v.ex8+v.ex10)}</strong></td>
+      <td>${fmt(v.total)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('resultArea').innerHTML = `
+  <div class="summary-grid">
+    <div class="summary-card"><div class="label">集計件数</div><div class="value">${grandCount.toLocaleString()}件</div></div>
+    <div class="summary-card"><div class="label">税抜総合計</div><div class="value">${fmt(grandEx8+grandEx10)}</div></div>
+    <div class="summary-card"><div class="label">税込合計</div><div class="value">${fmt(grandTotal)}</div></div>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div class="result-header">
+      <h2>なごみや 月次受注集計 — ${year}年${month}月</h2>
+      <p>納品日: ${dateFrom}〜${dateTo}　ステータス: 完了・採否結果待ち</p>
+    </div>
+    <table>
+      <thead><tr>
+        <th>決済方法</th><th>件数</th><th>税抜（8%）</th><th>税抜（10%）</th><th>税抜総合計</th><th>税込合計</th>
+      </tr></thead>
+      <tbody>
+        ${trows}
+        <tr class="total-row">
+          <td>合計</td><td>${grandCount}</td>
+          <td>${fmt(grandEx8)}</td><td>${fmt(grandEx10)}</td>
+          <td>${fmt(grandEx8+grandEx10)}</td><td>${fmt(grandTotal)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>`;
+
+  btn.disabled = false; btn.textContent = '集計を実行';
+}
+</script>
+</body>
+</html>
