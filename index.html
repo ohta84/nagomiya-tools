@@ -46,6 +46,33 @@ tr:nth-child(even) { background: #fafafa; }
   <h1>🍡 なごみや 月次受注集計ツール</h1>
   <p class="subtitle">BカートのCSVをドロップして集計できます</p>
 
+  <div class="card" style="margin-bottom:1.5rem; background:#f8f9fa;">
+    <h2 style="font-size:15px; font-weight:600; margin-bottom:1rem;">📋 使い方・抽出ルール</h2>
+    <div style="font-size:13px; line-height:1.8; color:#444;">
+      <p style="font-weight:600; margin-bottom:6px;">【STEP 1｜BカートでCSVをダウンロード】</p>
+      <p>受注管理 → 配送情報タブ → 以下の条件で絞り込み</p>
+      <ul style="margin: 6px 0 12px 1.2rem;">
+        <li>納品日：集計したい月の1日〜末日</li>
+        <li>対応状況：<strong>完了</strong>・<strong>採否結果待ち</strong>にチェック</li>
+      </ul>
+      <p>「★ナゴミヤ月末用CSV」をダウンロード（500件ずつ複数ファイルになる場合あり）</p>
+      <p style="margin-top:8px; color:#c00;">⚠️ CSVはExcelで開かないこと（データが壊れます）</p>
+      <p style="font-weight:600; margin-top:16px; margin-bottom:6px;">【STEP 2｜ツールで集計】</p>
+      <ul style="margin: 6px 0 12px 1.2rem;">
+        <li>対象年月を選択</li>
+        <li>ダウンロードしたCSVを全部ドロップ（複数同時OK）</li>
+        <li>「集計を実行」ボタンを押す</li>
+      </ul>
+      <p style="font-weight:600; margin-bottom:6px;">【集計対象の決済方法】</p>
+      <ul style="margin: 6px 0 0 1.2rem;">
+        <li>銀行振込</li>
+        <li>Bカート掛け払い 請求代行プラン</li>
+        <li>マネーフォワード ケッサイ</li>
+        <li>クレジット</li>
+      </ul>
+    </div>
+  </div>
+
   <div class="card">
     <label>対象年月</label>
     <input type="month" id="targetMonth">
