@@ -247,6 +247,7 @@ async function runAggregation() {
 
   const summary = {};
   TARGET_PAYMENTS.forEach(pm => { summary[pm] = { count:0, ex8:0, ex10:0, total:0 }; });
+  const seenShipping = new Set();
   filtered.forEach(row => {
     const pm = TARGET_PAYMENTS.find(p => (row['決済方法']||'').includes(p));
     if (!pm) return;
