@@ -252,10 +252,12 @@ async function runAggregation() {
     const pm = TARGET_PAYMENTS.find(p => (row['決済方法']||'').includes(p));
     if (!pm) return;
     const { ex8, ex10 } = parseTax(row['税率別受注総額']);
-    const shippingEx = parseFloat((row['送料']||'0')) || 0;
+    const orderNo = row['受注番号'] || '';
+    const shippingEx = (!orderNo || seenShipping.has(orderNo)) ? 0 : (parseFloat((row['送料']||'0')) || 0);
+    if (orderNo) seenShipping.add(orderNo);
     summary[pm].count++;
     summary[pm].ex8 += ex8;
-    summary[pm].ex10 += ex10 + shippingEx;
+    summary[pm].ex10 += ex10;
     summary[pm].total += (parseFloat((row['受注総額']||'0')) || 0) + Math.round(shippingEx * 1.10);
   });
 
