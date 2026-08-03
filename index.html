@@ -79,6 +79,13 @@ tr:nth-child(even) { background: #fafafa; }
       <li>マネーフォワード ケッサイ</li>
       <li>クレジット</li>
     </ul>
+
+    <p class="step">【集計ロジック】</p>
+    <ul>
+      <li>同一受注番号の複数行（商品ごとの明細行）は1件に統合してから集計します。</li>
+      <li>「税率別受注総額」列（例: <code>8:12345</code> / <code>10:678</code>）には商品代・送料・資材費などが<strong>税込・税率ごとにすでに正しく振り分けられた金額</strong>が入っているため、送料を別途加算することはしません（二重計上防止）。</li>
+      <li>税込金額は元データの値をそのまま合算し、税抜金額は決済方法ごとの合計額から最後に1回だけ算出します（注文単位で丸めを繰り返すと誤差が積み上がるため）。</li>
+    </ul>
   </div>
 
   <!-- 集計ツール -->
@@ -190,15 +197,18 @@ function parseCSV(text) {
   return { headers, rows };
 }
 
-function parseTax(val) {
+// 修正: 税込金額(t8, t10)をそのまま加算で返す。税抜換算は集計後にまとめて1回だけ行う。
+// 同じ税率が複数行に分かれているケースにも対応（上書きではなく加算）。
+function parseTaxRaw(val) {
   let t8 = 0, t10 = 0;
-  if (!val) return { ex8: 0, ex10: 0 };
+  if (!val) return { t8: 0, t10: 0 };
   String(val).split(/[\r\n,]+/).forEach(part => {
     part = part.trim();
-    if (part.startsWith('10:')) { try { t10 = parseFloat(part.substring(3)) || 0; } catch(e){} }
-    else if (part.startsWith('8:')) { try { t8 = parseFloat(part.substring(2)) || 0; } catch(e){} }
+    if (!part) return;
+    if (part.startsWith('10:')) { t10 += parseFloat(part.substring(3)) || 0; }
+    else if (part.startsWith('8:')) { t8 += parseFloat(part.substring(2)) || 0; }
   });
-  return { ex8: Math.round(t8/1.08), ex10: Math.round(t10/1.10) };
+  return { t8, t10 };
 }
 
 const fmt = n => '¥' + Math.round(n).toLocaleString();
@@ -223,6 +233,7 @@ async function runAggregation() {
     allRows = allRows.concat(rows);
   }
 
+  // 受注番号で重複除去（同一注文の商品別明細行を1件に統合）
   const seen = new Set();
   const deduped = [];
   allRows.forEach(row => {
@@ -245,19 +256,27 @@ async function runAggregation() {
     btn.disabled = false; btn.textContent = '集計を実行'; return;
   }
 
+  // 決済方法ごとに「税込」の8%分・10%分をそのまま合算する（送料等はここに含まれているので別途加算しない）
   const summary = {};
-  TARGET_PAYMENTS.forEach(pm => { summary[pm] = { count:0, ex8:0, ex10:0, total:0 }; });
-    filtered.forEach(row => {
+  TARGET_PAYMENTS.forEach(pm => { summary[pm] = { count:0, inc8:0, inc10:0 }; });
+
+  filtered.forEach(row => {
     const pm = TARGET_PAYMENTS.find(p => (row['決済方法']||'').includes(p));
     if (!pm) return;
-    const { ex8, ex10 } = parseTax(row['税率別受注総額']);
-    const shippingEx = parseFloat((row['送料']||'0')) || 0;
-    const shippingInc = Math.round(shippingEx * 1.10);
+    const { t8, t10 } = parseTaxRaw(row['税率別受注総額']);
     summary[pm].count++;
-    summary[pm].ex8 += ex8;
-    summary[pm].ex10 += ex10;
-    summary[pm].total += (Math.round(ex8 * 1.08) + Math.round(ex10 * 1.10) + shippingInc);
+    summary[pm].inc8 += t8;
+    summary[pm].inc10 += t10;
   });
+
+  // 税抜金額は決済方法ごとの合計から最後に1回だけ算出（注文単位の丸め誤差の積み上げを防止）
+  TARGET_PAYMENTS.forEach(pm => {
+    const v = summary[pm];
+    v.total = v.inc8 + v.inc10;           // 税込合計（元データの値をそのまま合算 = 最も正確）
+    v.ex8 = Math.round(v.inc8 / 1.08);    // 税抜（8%分）
+    v.ex10 = Math.round(v.inc10 / 1.10);  // 税抜（10%分）
+  });
+
   const grandEx8 = Object.values(summary).reduce((s,v)=>s+v.ex8,0);
   const grandEx10 = Object.values(summary).reduce((s,v)=>s+v.ex10,0);
   const grandTotal = Object.values(summary).reduce((s,v)=>s+v.total,0);
