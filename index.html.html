@@ -86,6 +86,7 @@ tr:nth-child(even) { background: #fafafa; }
       <li>同一受注番号の複数行（商品ごとの明細行）は1件に統合してから集計します。</li>
       <li>「税率別受注総額」列（例: <code>8:12345</code> / <code>10:678</code>）には商品代・送料・資材費などが<strong>税込・税率ごとにすでに正しく振り分けられた金額</strong>が入っているため、送料を別途加算することはしません（二重計上防止）。</li>
       <li>税込金額は元データの値をそのまま合算し、税抜金額は決済方法ごとの合計額から最後に1回だけ算出します（注文単位で丸めを繰り返すと誤差が積み上がるため）。</li>
+      <li>北條製餡株式会社・吉川食品株式会社・矢野食品株式会社（Bカート会員ID: 14913・14914・14915）宛の注文はメーカー向けのため、自動的に集計から除外します。</li>
     </ul>
   </div>
 
@@ -111,6 +112,8 @@ tr:nth-child(even) { background: #fafafa; }
 
 <script>
 const TARGET_PAYMENTS = ['銀行振込','Bカート掛け払い 請求代行プラン','マネーフォワード ケッサイ','クレジット'];
+// 集計から除外する会員ID（北條製餡・吉川食品・矢野食品＝メーカー向け注文のため売上集計に含めない）
+const EXCLUDED_MEMBER_IDS = ['14913', '14914', '14915'];
 let loadedFiles = [];
 
 const now = new Date();
@@ -243,9 +246,12 @@ async function runAggregation() {
 
   // 対応状況（完了／採否結果待ち／カスタム10 など）による絞り込みは行わない。
   // Bカート側で対象ステータスに絞ってからCSVを抽出している前提のため、CSVに入っている行はすべて集計対象とする。
+  // ただし、北條製餡・吉川食品・矢野食品（会員ID: 14913,14914,14915）宛の注文はメーカー向けのため除外する。
   const filtered = deduped.filter(r => {
     const d = (r['納品日'] || '').substring(0,10);
+    const memberId = (r['Bカート会員ID'] || '').toString().trim();
     return d >= dateFrom && d <= dateTo &&
+      !EXCLUDED_MEMBER_IDS.includes(memberId) &&
       TARGET_PAYMENTS.some(p => (r['決済方法']||'').includes(p));
   });
 
