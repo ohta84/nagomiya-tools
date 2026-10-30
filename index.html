@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>なごみや 月次受注集計ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #333; }
@@ -30,11 +31,17 @@ input[type="month"]:focus { border-color: #1F3864; }
 .btn { width: 100%; padding: 12px; font-size: 15px; font-weight: 600; background: #1F3864; color: #fff; border: none; border-radius: 10px; cursor: pointer; transition: background 0.2s; }
 .btn:hover { background: #2E75B6; }
 .btn:disabled { background: #ccc; cursor: not-allowed; }
+.btn-row { display: flex; gap: 10px; margin-top: 12px; }
+.btn-secondary { flex: 1; padding: 10px; font-size: 13px; font-weight: 600; background: #fff; color: #1F3864; border: 1px solid #1F3864; border-radius: 10px; cursor: pointer; transition: background 0.2s; }
+.btn-secondary:hover { background: #f0f4ff; }
+.btn-secondary:disabled { color: #aaa; border-color: #ccc; cursor: not-allowed; }
 .debug { font-size: 12px; color: #888; font-family: monospace; white-space: pre-wrap; margin-top: 1rem; }
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
 .summary-card { background: #f8f9fa; border-radius: 10px; padding: 1rem; }
 .summary-card .label { font-size: 12px; color: #666; margin-bottom: 4px; }
 .summary-card .value { font-size: 22px; font-weight: 600; color: #1F3864; }
+.summary-card.warn-card { background: #fff3e0; }
+.summary-card.warn-card .value { color: #c06b00; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th { text-align: left; padding: 10px 12px; font-size: 12px; font-weight: 600; color: #666; border-bottom: 2px solid #eee; }
 th:not(:first-child) { text-align: right; }
@@ -45,6 +52,11 @@ tr:nth-child(even) { background: #fafafa; }
 .result-header { padding: 1rem 1.25rem; border-bottom: 1px solid #eee; }
 .result-header h2 { font-size: 16px; font-weight: 600; }
 .result-header p { font-size: 12px; color: #888; margin-top: 2px; }
+.warning-card { background: #fff8ed; border: 1px solid #f0c674; }
+.warning-card h2 { font-size: 15px; font-weight: 600; color: #a05a00; margin-bottom: 4px; }
+.warning-card p.lead { font-size: 13px; color: #7a4a00; margin-bottom: 1rem; }
+.warning-table th { color: #a05a00; }
+.warning-table td:first-child, .warning-table th:first-child { text-align: left; }
 </style>
 </head>
 <body>
@@ -64,7 +76,7 @@ tr:nth-child(even) { background: #fafafa; }
     </ul>
     <p style="font-size:12px;color:#888;">※「カスタム10」（サンプル納品済み・感想待ち）は「採否結果待ち」の一種として、このツールでは自動的に集計対象に含めています。</p>
     <p>「★ナゴミヤ月末用CSV」をダウンロード（500件ずつ複数ファイルになる場合あり・全部DL）</p>
-    <p class="warn">⚠️ CSVはExcelで開かないこと（データが壊れます）</p>
+    <p class="warn">⚠️ CSVはExcelで開かないこと（データが壊れます。万一壊れていても、本ツールは受注総額ベースで集計するため合計金額はズレません。該当注文は「税率不明」として警告表示されます）</p>
 
     <p class="step">【STEP 2｜ツールで集計】</p>
     <ul>
@@ -84,8 +96,9 @@ tr:nth-child(even) { background: #fafafa; }
     <p class="step">【集計ロジック】</p>
     <ul>
       <li>同一受注番号の複数行（商品ごとの明細行）は1件に統合してから集計します。</li>
-      <li>「税率別受注総額」列（例: <code>8:12345</code> / <code>10:678</code>）には商品代・送料・資材費などが<strong>税込・税率ごとにすでに正しく振り分けられた金額</strong>が入っているため、送料を別途加算することはしません（二重計上防止）。</li>
-      <li>税込金額は元データの値をそのまま合算し、税抜金額は決済方法ごとの合計額から最後に1回だけ算出します（注文単位で丸めを繰り返すと誤差が積み上がるため）。</li>
+      <li><strong>売上合計（税込）は「受注総額」列の合計</strong>を正として計算します。「税率別受注総額」列はあくまで8%/10%の内訳を知るためのもので、売上合計自体には使いません。送料・資材費もすでに受注総額に含まれているため、別途加算はしません（二重計上防止）。</li>
+      <li>「税率別受注総額」列が読み取れない、または8%分＋10%分の合計が「受注総額」と一致しない注文は、金額は合計に含めたうえで<strong>「税率不明」として別枠に集計・警告表示</strong>します（Excelでの文字化け等が原因で起こります）。</li>
+      <li>税抜金額（8%・10%）は、内訳が正常に読み取れた注文の合計額から最後に1回だけ算出します（注文単位で丸めを繰り返すと誤差が積み上がるため）。</li>
       <li>北條製餡株式会社・吉川食品株式会社・矢野食品株式会社（Bカート会員ID: 14913・14914・14915）宛の注文はメーカー向けのため、自動的に集計から除外します。</li>
     </ul>
   </div>
@@ -108,6 +121,10 @@ tr:nth-child(even) { background: #fafafa; }
   </div>
 
   <div id="resultArea"></div>
+  <div class="btn-row" id="downloadRow" style="display:none;">
+    <button class="btn-secondary" id="downloadCsvBtn" onclick="downloadMergedCsv()">📄 重複除去CSVをダウンロード</button>
+    <button class="btn-secondary" id="downloadExcelBtn" onclick="downloadExcelReport()">📊 Excel（決済方法別）をダウンロード</button>
+  </div>
 </div>
 
 <script>
@@ -115,6 +132,9 @@ const TARGET_PAYMENTS = ['銀行振込','Bカート掛け払い 請求代行プ�
 // 集計から除外する会員ID（北條製餡・吉川食品・矢野食品＝メーカー向け注文のため売上集計に含めない）
 const EXCLUDED_MEMBER_IDS = ['14913', '14914', '14915'];
 let loadedFiles = [];
+let lastFiltered = [];   // 直近の集計に使った行（ダウンロード用）
+let lastSummary = null;  // 直近の決済方法別サマリー（Excel用）
+let lastYearMonth = { year: '', month: '' };
 
 const now = new Date();
 document.getElementById('targetMonth').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -200,18 +220,23 @@ function parseCSV(text) {
   return { headers, rows };
 }
 
-// 修正: 税込金額(t8, t10)をそのまま加算で返す。税抜換算は集計後にまとめて1回だけ行う。
-// 同じ税率が複数行に分かれているケースにも対応（上書きではなく加算）。
+// 「税率別受注総額」列(例: "8:12345" / "10:678")から税込8%分・10%分をそのまま加算で取り出す。
+// パターンに一致しない行（Excelで時刻等に文字化けした場合など）は 0,0 を返す。
 function parseTaxRaw(val) {
-  let t8 = 0, t10 = 0;
-  if (!val) return { t8: 0, t10: 0 };
+  let t8 = 0, t10 = 0, matchedAny = false;
+  if (!val) return { t8: 0, t10: 0, matchedAny: false };
   String(val).split(/[\r\n,]+/).forEach(part => {
     part = part.trim();
     if (!part) return;
-    if (part.startsWith('10:')) { t10 += parseFloat(part.substring(3)) || 0; }
-    else if (part.startsWith('8:')) { t8 += parseFloat(part.substring(2)) || 0; }
+    if (part.startsWith('10:')) { const n = parseFloat(part.substring(3)); if (!isNaN(n)) { t10 += n; matchedAny = true; } }
+    else if (part.startsWith('8:')) { const n = parseFloat(part.substring(2)); if (!isNaN(n)) { t8 += n; matchedAny = true; } }
   });
-  return { t8, t10 };
+  return { t8, t10, matchedAny };
+}
+
+function parseAmount(val) {
+  const n = parseInt(String(val == null ? '' : val).replace(/[^\d-]/g, ''), 10);
+  return isNaN(n) ? 0 : n;
 }
 
 const fmt = n => '¥' + Math.round(n).toLocaleString();
@@ -258,74 +283,211 @@ async function runAggregation() {
   document.getElementById('debugArea').textContent =
     `取得: ${allRows.length}行 / 重複削除: ${deduped.length}件 / 集計対象: ${filtered.length}件`;
 
+  document.getElementById('downloadRow').style.display = 'none';
+
   if (filtered.length === 0) {
     document.getElementById('resultArea').innerHTML = '<div class="card"><p style="color:#888;font-size:14px;">該当データがありません。納品日・ステータスを確認してください。</p></div>';
     btn.disabled = false; btn.textContent = '集計を実行'; return;
   }
 
-  // 決済方法ごとに「税込」の8%分・10%分をそのまま合算する（送料等はここに含まれているので別途加算しない）
+  // 決済方法ごとに集計する。
+  // 売上合計（税込）は「受注総額」列の合計を正とする。「税率別受注総額」はあくまで8%/10%内訳の参考情報。
+  // 内訳が読み取れない、または8%分+10%分が受注総額と一致しない注文は「税率不明」として別枠にする（金額は合計に含める）。
   const summary = {};
-  TARGET_PAYMENTS.forEach(pm => { summary[pm] = { count:0, inc8:0, inc10:0 }; });
+  TARGET_PAYMENTS.forEach(pm => { summary[pm] = { count:0, total:0, inc8:0, inc10:0, unknownAmount:0, unknownOrders:[], rows:[] }; });
+
+  const allUnknownOrders = [];
 
   filtered.forEach(row => {
     const pm = TARGET_PAYMENTS.find(p => (row['決済方法']||'').includes(p));
     if (!pm) return;
-    const { t8, t10 } = parseTaxRaw(row['税率別受注総額']);
+    const orderTotal = parseAmount(row['受注総額']);
+    const { t8, t10, matchedAny } = parseTaxRaw(row['税率別受注総額']);
+    // 受注総額が0円の注文（不出・キャンセル等）は内訳を確認する実害がないため警告対象から除外
+    const isUnknown = orderTotal !== 0 && (!matchedAny || (t8 + t10) !== orderTotal);
+
+    row['_受注総額'] = orderTotal;
+    row['_税込8%金額'] = isUnknown ? '' : t8;
+    row['_税込10%金額'] = isUnknown ? '' : t10;
+    row['_税率不明'] = isUnknown ? '税率不明' : '';
+
     summary[pm].count++;
-    summary[pm].inc8 += t8;
-    summary[pm].inc10 += t10;
+    summary[pm].total += orderTotal; // 常に受注総額を正として合算
+    summary[pm].rows.push(row);
+
+    if (isUnknown) {
+      summary[pm].unknownAmount += orderTotal;
+      summary[pm].unknownOrders.push(row);
+      allUnknownOrders.push({ pm, row });
+    } else {
+      summary[pm].inc8 += t8;
+      summary[pm].inc10 += t10;
+    }
   });
 
-  // 税抜金額は決済方法ごとの合計から最後に1回だけ算出（注文単位の丸め誤差の積み上げを防止）
+  // 税抜金額は、内訳が正常な注文の合計額から最後に1回だけ算出（丸め誤差の積み上げを防止）
   TARGET_PAYMENTS.forEach(pm => {
     const v = summary[pm];
-    v.total = v.inc8 + v.inc10;           // 税込合計（元データの値をそのまま合算 = 最も正確）
-    v.ex8 = Math.round(v.inc8 / 1.08);    // 税抜（8%分）
-    v.ex10 = Math.round(v.inc10 / 1.10);  // 税抜（10%分）
+    v.ex8 = Math.round(v.inc8 / 1.08);
+    v.ex10 = Math.round(v.inc10 / 1.10);
   });
 
   const grandEx8 = Object.values(summary).reduce((s,v)=>s+v.ex8,0);
   const grandEx10 = Object.values(summary).reduce((s,v)=>s+v.ex10,0);
   const grandTotal = Object.values(summary).reduce((s,v)=>s+v.total,0);
   const grandCount = Object.values(summary).reduce((s,v)=>s+v.count,0);
+  const grandUnknown = Object.values(summary).reduce((s,v)=>s+v.unknownAmount,0);
 
   const trows = TARGET_PAYMENTS.map(pm => {
     const v = summary[pm];
     return `<tr>
       <td>${pm}</td><td>${v.count}</td>
       <td>${fmt(v.ex8)}</td><td>${fmt(v.ex10)}</td>
-      <td><strong>${fmt(v.ex8+v.ex10)}</strong></td>
-      <td>${fmt(v.total)}</td>
+      <td>${v.unknownAmount ? fmt(v.unknownAmount) : '-'}</td>
+      <td><strong>${fmt(v.total)}</strong></td>
     </tr>`;
   }).join('');
 
-  document.getElementById('resultArea').innerHTML = `
+  let html = `
   <div class="summary-grid">
     <div class="summary-card"><div class="label">集計件数</div><div class="value">${grandCount.toLocaleString()}件</div></div>
-    <div class="summary-card"><div class="label">税抜総合計</div><div class="value">${fmt(grandEx8+grandEx10)}</div></div>
-    <div class="summary-card"><div class="label">税込合計</div><div class="value">${fmt(grandTotal)}</div></div>
+    <div class="summary-card"><div class="label">税込合計（受注総額ベース）</div><div class="value">${fmt(grandTotal)}</div></div>
+    <div class="summary-card${grandUnknown ? ' warn-card' : ''}"><div class="label">うち税率不明</div><div class="value">${fmt(grandUnknown)}</div></div>
   </div>
   <div class="card" style="padding:0;overflow:hidden;">
     <div class="result-header">
       <h2>なごみや 月次受注集計 — ${year}年${month}月</h2>
-      <p>納品日: ${dateFrom}〜${dateTo}　対応状況: CSV内の全ステータスを集計対象</p>
+      <p>納品日: ${dateFrom}〜${dateTo}　対応状況: CSV内の全ステータスを集計対象　売上合計は受注総額ベース</p>
     </div>
     <table>
       <thead><tr>
-        <th>決済方法</th><th>件数</th><th>税抜（8%）</th><th>税抜（10%）</th><th>税抜総合計</th><th>税込合計</th>
+        <th>決済方法</th><th>件数</th><th>税抜（8%）</th><th>税抜（10%）</th><th>税率不明（税込）</th><th>税込合計</th>
       </tr></thead>
       <tbody>
         ${trows}
         <tr class="total-row">
           <td>合計</td><td>${grandCount}</td>
           <td>${fmt(grandEx8)}</td><td>${fmt(grandEx10)}</td>
-          <td>${fmt(grandEx8+grandEx10)}</td><td>${fmt(grandTotal)}</td>
+          <td>${grandUnknown ? fmt(grandUnknown) : '-'}</td><td>${fmt(grandTotal)}</td>
         </tr>
       </tbody>
     </table>
   </div>`;
 
+  if (allUnknownOrders.length > 0) {
+    const warnRows = allUnknownOrders.map(({pm, row}) => `<tr>
+      <td>${row['受注番号']||''}</td>
+      <td>${row['会社名']||''}</td>
+      <td>${pm}</td>
+      <td>${fmt(row['_受注総額'])}</td>
+    </tr>`).join('');
+
+    html += `
+    <div class="card warning-card">
+      <h2>⚠️ 税率内訳を確認してください（${allUnknownOrders.length}件・合計 ${fmt(grandUnknown)}）</h2>
+      <p class="lead">以下の注文は「税率別受注総額」列が読み取れない、または8%分＋10%分の合計が受注総額と一致しませんでした（CSVがExcelで開かれて文字化けした等が主な原因です）。金額は売上合計に含めていますが、8%/10%どちらの税率かは手動でBカート管理画面にて確認してください。</p>
+      <table class="warning-table">
+        <thead><tr><th>受注番号</th><th>会社名</th><th>決済方法</th><th>受注総額（税込）</th></tr></thead>
+        <tbody>${warnRows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  document.getElementById('resultArea').innerHTML = html;
+
+  // ダウンロード機能用に保持
+  lastFiltered = filtered;
+  lastSummary = summary;
+  lastYearMonth = { year, month };
+  document.getElementById('downloadRow').style.display = 'flex';
+
   btn.disabled = false; btn.textContent = '集計を実行';
+}
+
+// ---- ダウンロード機能 ----
+
+function csvEscape(val) {
+  const s = (val === undefined || val === null) ? '' : String(val);
+  if (/[",\n\r]/.test(s)) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function downloadMergedCsv() {
+  if (!lastFiltered.length) return;
+  // 元の列に加えて、内部計算用に付与した列（受注総額・税込8%/10%金額・税率不明フラグ）も出力する
+  const baseHeaders = Object.keys(lastFiltered[0]).filter(h => !h.startsWith('_'));
+  const headers = [...baseHeaders, '税込8%金額', '税込10%金額', '税率不明フラグ'];
+
+  const lines = [headers.map(csvEscape).join(',')];
+  lastFiltered.forEach(row => {
+    const vals = baseHeaders.map(h => csvEscape(row[h]));
+    vals.push(csvEscape(row['_税込8%金額']));
+    vals.push(csvEscape(row['_税込10%金額']));
+    vals.push(csvEscape(row['_税率不明']));
+    lines.push(vals.join(','));
+  });
+
+  const csvText = '﻿' + lines.join('\r\n');
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `data${lastYearMonth.year}${lastYearMonth.month}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadExcelReport() {
+  if (!lastSummary) return;
+  const wb = XLSX.utils.book_new();
+
+  // サマリーシート
+  const summaryAoa = [
+    ['決済方法', '件数', '税抜8%', '税抜10%', '税率不明(税込)', '税込合計(受注総額ベース)']
+  ];
+  let gCount=0, gEx8=0, gEx10=0, gUnknown=0, gTotal=0;
+  TARGET_PAYMENTS.forEach(pm => {
+    const v = lastSummary[pm];
+    summaryAoa.push([pm, v.count, v.ex8, v.ex10, v.unknownAmount, v.total]);
+    gCount+=v.count; gEx8+=v.ex8; gEx10+=v.ex10; gUnknown+=v.unknownAmount; gTotal+=v.total;
+  });
+  summaryAoa.push(['合計', gCount, gEx8, gEx10, gUnknown, gTotal]);
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryAoa);
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'サマリー');
+
+  // 決済方法別シート（明細＋8%/10%税込内訳＋税率不明フラグ）
+  const detailCols = ['受注番号','会社名','決済確認日','納品日','対応状況','Bカート会員ID','_受注総額','_税込8%金額','_税込10%金額','_税率不明','メモ'];
+  const detailLabels = ['受注番号','会社名','決済確認日','納品日','対応状況','Bカート会員ID','受注総額(税込)','税込8%金額','税込10%金額','税率不明フラグ','メモ'];
+
+  TARGET_PAYMENTS.forEach(pm => {
+    const v = lastSummary[pm];
+    const aoa = [detailLabels];
+    v.rows.forEach(row => {
+      aoa.push(detailCols.map(c => row[c] !== undefined ? row[c] : ''));
+    });
+    aoa.push(['合計','','','','','', v.inc8+v.inc10, v.inc8, v.inc10, '', '']);
+    const sheet = XLSX.utils.aoa_to_sheet(aoa);
+    const sheetName = pm.length > 25 ? pm.substring(0,25) : pm;
+    XLSX.utils.book_append_sheet(wb, sheet, sheetName);
+  });
+
+  // 税率不明の注文だけをまとめた警告シート
+  const allUnknown = [];
+  TARGET_PAYMENTS.forEach(pm => {
+    lastSummary[pm].unknownOrders.forEach(row => allUnknown.push({ pm, row }));
+  });
+  if (allUnknown.length > 0) {
+    const warnAoa = [['受注番号','会社名','決済方法','受注総額(税込)','元の税率別受注総額の値']];
+    allUnknown.forEach(({pm, row}) => {
+      warnAoa.push([row['受注番号'], row['会社名'], pm, row['_受注総額'], row['税率別受注総額']]);
+    });
+    const warnSheet = XLSX.utils.aoa_to_sheet(warnAoa);
+    XLSX.utils.book_append_sheet(wb, warnSheet, '税率不明_要確認');
+  }
+
+  XLSX.writeFile(wb, `${lastYearMonth.year}${lastYearMonth.month}_決済方法別集計.xlsx`);
 }
 </script>
 </body>
